@@ -38,7 +38,7 @@ void BlitzLevelInfoLayer::loadStartPosLevel()
 
     bool buttonEnabled = Mod::get()->getSettingValue<bool>("show-startpos-button-in-levelinfo");
     if (!buttonEnabled)
-        return true;
+        return;
     
     m_fields->m_listener.spawn(web::WebRequest().get(reqUrl),
                                [this](web::WebResponse value)
