@@ -9,6 +9,12 @@ bool BlitzLevelInfoLayer::init(GJGameLevel *level, bool challenge)
     auto practiceModeLabel = this->getChildByID("practice-mode-label");
     auto practiceModePercentage = this->getChildByID("practice-mode-percentage");
 
+    replacePracticeBarWithProgression(utils::numToString(level->m_levelID.value()), practiceModeBar, practiceModeLabel, practiceModePercentage);
+    
+    bool buttonEnabled = Mod::get()->getSettingValue<bool>("show-startpos-button-in-levelinfo");
+    if (!buttonEnabled)
+        return true;
+
     m_fields->m_startPosSprite = CircleButtonSprite::createWithSprite("startpos-button.png"_spr);
 
     m_fields->m_startposBtn = CCMenuItemSpriteExtra::create(m_fields->m_startPosSprite, this, menu_selector(BlitzLevelInfoLayer::onOpenStartPos));
@@ -20,7 +26,6 @@ bool BlitzLevelInfoLayer::init(GJGameLevel *level, bool challenge)
     menu->addChild(m_fields->m_startposBtn);
     menu->updateLayout();
 
-    replacePracticeBarWithProgression(utils::numToString(level->m_levelID.value()), practiceModeBar, practiceModeLabel, practiceModePercentage);
     loadStartPosLevel();
 
     return true;
@@ -31,6 +36,10 @@ void BlitzLevelInfoLayer::loadStartPosLevel()
     auto levelId = m_level->m_levelID;
     std::string reqUrl = fmt::format("{}/levels/originalId:{}", API_URL, levelId);
 
+    bool buttonEnabled = Mod::get()->getSettingValue<bool>("show-startpos-button-in-levelinfo");
+    if (!buttonEnabled)
+        return true;
+    
     m_fields->m_listener.spawn(web::WebRequest().get(reqUrl),
                                [this](web::WebResponse value)
                                {
@@ -68,6 +77,10 @@ void BlitzLevelInfoLayer::loadStartPosLevel()
 
 void BlitzLevelInfoLayer::onOpenStartPos(CCObject *sender)
 {
+    bool buttonEnabled = Mod::get()->getSettingValue<bool>("show-startpos-button-in-levelinfo");
+    if (!buttonEnabled)
+        return;
+    
     if (!m_fields->m_startposLevel || m_fields->m_startposLevel->levelId <= 0)
         return;
 
