@@ -1,3 +1,23 @@
+# 2.2.5
+- Added a News tab for StartPos publications, mod updates, announcements, and warnings
+- Added news action buttons for opening levels, opening links, and copying text
+- Added news caching for offline use and temporary API failures
+- Improved run statistics layout, labels, and pluralization
+- Improved profile loading stability
+
+# 2.2.4
+- Fixed invisible StartPos page buttons remaining active after leaving the page
+- Fixed a crash when exiting the game after visiting the High-Quality Start Positions page
+- Fixed potential crashes when search results contain fewer than two levels
+- Fixed a memory leak when reloading the StartPos levels list
+
+# 2.2.3
+- Reduced lag spikes after deaths by saving profiles separately
+- Added automatic migration from the legacy profile storage format
+- Improved profile loading and data validation
+- Improved profile import and persistence logic
+- Updated Geode to 5.8.2
+
 # 2.2.2
 - Updated StartPos recommendation value to 8
 - Added best run line visualization in StageRangeCell
