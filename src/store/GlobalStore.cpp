@@ -344,9 +344,12 @@ void GlobalStore::resetRun()
   runEnd = 0.f;
 }
 
-int GlobalStore::checkRun(std::string const &profileId, float timePlayed)
+int GlobalStore::checkRun(
+    std::string const &profileId,
+    float timePlayed)
 {
-  const float eps = 0.01f;
+  constexpr float eps = 0.01f;
+
   const float runDiff = std::abs(runEnd - runStart);
 
   auto *currentProfile = getProfileById(profileId);
@@ -359,117 +362,334 @@ int GlobalStore::checkRun(std::string const &profileId, float timePlayed)
 
   Stage *targetStage = nullptr;
   Range *targetRange = nullptr;
+
   bool progressHasChecked = false;
   bool isStageClosed = false;
 
-  for (auto &stage : currentProfile->data.stages)
+  auto getOverlap =
+      [this](Range const *range) -> float
+  {
+    const float overlapStart =
+        std::max(runStart, range->from);
+
+    const float overlapEnd =
+        std::min(runEnd, range->to);
+
+    return std::max(
+        0.0f,
+        overlapEnd - overlapStart);
+  };
+
+  auto isTouched =
+      [&getOverlap, eps](Range const *range)
+  {
+    return getOverlap(range) > eps;
+  };
+
+  auto canPassRange =
+      [this, eps](Range const *range)
+  {
+    return runStart <= range->from + eps &&
+           runEnd + eps >= range->to;
+  };
+
+  auto getCoverage =
+      [&getOverlap, eps](Range const *range)
+      -> float
+  {
+    const float rangeLength =
+        range->to - range->from;
+
+    if (rangeLength <= eps)
+      return 0.0f;
+
+    return getOverlap(range) /
+           rangeLength;
+  };
+
+  auto isBetterPassable =
+      [this, eps](
+          Range const *candidate,
+          Range const *current,
+          bool checked)
+  {
+    if (!current)
+      return true;
+
+    const float candidateFromDistance =
+        std::abs(
+            candidate->from -
+            runStart);
+
+    const float currentFromDistance =
+        std::abs(
+            current->from -
+            runStart);
+
+    if (
+        std::fabs(
+            candidateFromDistance -
+            currentFromDistance) > eps)
+    {
+      return candidateFromDistance <
+             currentFromDistance;
+    }
+
+    if (
+        std::fabs(
+            candidate->from -
+            current->from) > eps)
+    {
+      return candidate->from <
+             current->from;
+    }
+
+    if (checked)
+    {
+      return candidate->to >
+             current->to + eps;
+    }
+
+    return candidate->to <
+           current->to - eps;
+  };
+
+  auto isBetterCoverage =
+      [this, &getCoverage, eps](
+          Range const *candidate,
+          Range const *current,
+          bool checked)
+  {
+    if (!current)
+      return true;
+
+    const float candidateCoverage =
+        getCoverage(candidate);
+
+    const float currentCoverage =
+        getCoverage(current);
+
+    if (
+        std::fabs(
+            candidateCoverage -
+            currentCoverage) > eps)
+    {
+      return candidateCoverage >
+             currentCoverage;
+    }
+
+    const float candidateFromDistance =
+        std::abs(
+            candidate->from -
+            runStart);
+
+    const float currentFromDistance =
+        std::abs(
+            current->from -
+            runStart);
+
+    if (
+        std::fabs(
+            candidateFromDistance -
+            currentFromDistance) > eps)
+    {
+      return candidateFromDistance <
+             currentFromDistance;
+    }
+
+    if (
+        std::fabs(
+            candidate->from -
+            current->from) > eps)
+    {
+      return candidate->from >
+             current->from;
+    }
+
+    if (checked)
+    {
+      return candidate->to >
+             current->to + eps;
+    }
+
+    return candidate->to <
+           current->to - eps;
+  };
+
+  for (auto &stage :
+       currentProfile->data.stages)
   {
     if (isStageDeepChecked(stage))
       continue;
 
     targetStage = &stage;
-    std::vector<Range *> candidates;
+
+    std::vector<Range *> touchedRanges;
+    std::vector<Range *> uncheckedRanges;
 
     for (auto &range : stage.ranges)
     {
-      if (runStart <= range.from && range.consider)
-        candidates.push_back(&range);
+      if (!range.consider)
+        continue;
+
+      if (!isTouched(&range))
+        continue;
+
+      touchedRanges.push_back(&range);
+
+      if (!range.checked)
+      {
+        uncheckedRanges.push_back(
+            &range);
+      }
     }
 
-    if (!candidates.empty())
+    if (touchedRanges.empty())
+      break;
+
+    Range *statsRange = nullptr;
+
+    if (!uncheckedRanges.empty())
     {
-      auto *toCheck = *std::min_element(candidates.begin(), candidates.end(),
-                                        [eps](Range *a, Range *b)
-                                        {
-                                          if (std::fabs(a->from - b->from) <= eps)
-                                            return a->to < b->to;
-
-                                          return a->from < b->from;
-                                        });
-
-      Range *toCheckActualRange = nullptr;
-
-      for (auto *r : candidates)
+      for (auto *range : uncheckedRanges)
       {
-        if (r->consider && !r->checked && runEnd >= r->to)
+        if (!canPassRange(range))
+          continue;
+
+        if (
+            isBetterPassable(
+                range,
+                statsRange,
+                false))
         {
-          toCheckActualRange = r;
-          break;
+          statsRange = range;
         }
       }
 
-      if (!toCheckActualRange)
+      if (!statsRange)
       {
-        toCheck->attempts++;
-        toCheck->timePlayed += timePlayed;
-
-        auto bestRunDiff = std::abs(toCheck->bestRunFrom - toCheck->bestRunTo);
-
-        if (bestRunDiff < runDiff)
+        for (auto *range :
+             uncheckedRanges)
         {
-          toCheck->bestRunFrom = runStart;
-          toCheck->bestRunTo = runEnd;
+          if (
+              isBetterCoverage(
+                  range,
+                  statsRange,
+                  false))
+          {
+            statsRange = range;
+          }
         }
+      }
+    }
+    else
+    {
+      for (auto *range : touchedRanges)
+      {
+        if (!canPassRange(range))
+          continue;
 
-        if (toCheck->firstRunTo <= 0 && runEnd >= toCheck->to)
+        if (
+            isBetterPassable(
+                range,
+                statsRange,
+                true))
         {
-          toCheck->firstRunFrom = runStart;
-          toCheck->firstRunTo = runEnd;
+          statsRange = range;
         }
-
-        if (toCheck->checked && runEnd >= toCheck->to)
-          toCheck->completionCounter++;
-
-        break;
       }
 
-      toCheckActualRange->timePlayed += timePlayed;
-      toCheckActualRange->attempts++;
-
-      if (toCheckActualRange->checked)
-        break;
-
-      auto bestRunDiff = std::abs(toCheckActualRange->bestRunFrom - toCheckActualRange->bestRunTo);
-
-      if (bestRunDiff < runDiff)
+      if (!statsRange)
       {
-        toCheckActualRange->bestRunFrom = runStart;
-        toCheckActualRange->bestRunTo = runEnd;
+        for (auto *range :
+             touchedRanges)
+        {
+          if (
+              isBetterCoverage(
+                  range,
+                  statsRange,
+                  true))
+          {
+            statsRange = range;
+          }
+        }
       }
+    }
 
-      if (runEnd < toCheckActualRange->to)
-        break;
+    if (!statsRange)
+      break;
 
-      if (!Mod::get()->getSettingValue<bool>("disable-run-notifications"))
-      {
-        geode::Notification::create(
-            fmt::format("Passed {:.2f}-{:.2f} run", toCheckActualRange->from, toCheckActualRange->to),
-            geode::NotificationIcon::Success,
-            geode::NOTIFICATION_DEFAULT_TIME)
-            ->show();
-      }
+    statsRange->attempts++;
+    statsRange->timePlayed += timePlayed;
 
-      targetRange = toCheckActualRange;
-      toCheckActualRange->checked = true;
-      toCheckActualRange->firstRunFrom = runStart;
-      toCheckActualRange->firstRunTo = runEnd;
-      toCheckActualRange->completedAt = std::time(nullptr);
-      toCheckActualRange->attemptsToComplete = toCheckActualRange->attempts;
-      toCheckActualRange->completionCounter++;
-      progressHasChecked = true;
+    const float bestRunDiff =
+        std::abs(
+            statsRange->bestRunFrom -
+            statsRange->bestRunTo);
+
+    if (bestRunDiff < runDiff)
+    {
+      statsRange->bestRunFrom = runStart;
+      statsRange->bestRunTo = runEnd;
+    }
+
+    const bool passed =
+        canPassRange(statsRange);
+
+    if (statsRange->checked)
+    {
+      if (passed)
+        statsRange->completionCounter++;
+
       break;
     }
+
+    if (!passed)
+      break;
+
+    if (
+        !Mod::get()->getSettingValue<bool>(
+            "disable-run-notifications"))
+    {
+      geode::Notification::create(
+          fmt::format(
+              "Passed {:.2f}-{:.2f} run",
+              statsRange->from,
+              statsRange->to),
+          geode::NotificationIcon::Success,
+          geode::NOTIFICATION_DEFAULT_TIME)
+          ->show();
+    }
+
+    statsRange->checked = true;
+
+    statsRange->firstRunFrom = runStart;
+    statsRange->firstRunTo = runEnd;
+
+    statsRange->completedAt = std::time(nullptr);
+
+    statsRange->attemptsToComplete =
+        statsRange->attempts;
+
+    statsRange->completionCounter++;
+
+    targetRange = statsRange;
+    progressHasChecked = true;
 
     break;
   }
 
   if (targetStage)
   {
-    bool allChecked = std::all_of(targetStage->ranges.begin(), targetStage->ranges.end(),
-                                  [](const Range &r)
-                                  {
-                                    return r.checked || !r.consider;
-                                  });
+    const bool allChecked =
+        std::all_of(
+            targetStage->ranges.begin(),
+            targetStage->ranges.end(),
+            [](const Range &range)
+            {
+              return range.checked ||
+                     !range.consider;
+            });
 
     if (allChecked)
     {
@@ -479,7 +699,16 @@ int GlobalStore::checkRun(std::string const &profileId, float timePlayed)
   }
 
   if (targetRange)
-    RunClosedEvent().send(runStart, runEnd, currentProfile, targetRange, isStageClosed ? targetStage : nullptr);
+  {
+    RunClosedEvent().send(
+        runStart,
+        runEnd,
+        currentProfile,
+        targetRange,
+        isStageClosed
+            ? targetStage
+            : nullptr);
+  }
 
   saveProfile(*currentProfile);
 

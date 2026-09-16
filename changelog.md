@@ -1,3 +1,31 @@
+# v2.3.4
+- Fixed incorrect run assignment when multiple ranges overlap.
+- Runs now always assign stats and PASS to the same target range.
+- Improved fallback selection when no unchecked range can be completed.
+- Fixed repeated PASS counting for already completed ranges.
+
+# 2.3.3
+- Fixed a memory lifetime issue in StageRangeCell that could cause crashes when toggling ranges
+- Improved cleanup and recreation of Stage Browser UI elements
+
+# 2.3.2
+- Fixed an edge case where valid runs could be assigned to an earlier overlapping range that the run could not complete
+- Run assignment now prioritizes an unchecked overlapping range that the current attempt can actually pass
+
+# 2.3.1
+- Replaced platform-specific time formatting with Geode time utilities and `fmt::format`
+- Cleaned up backup filename time formatting
+
+# 2.3.0
+- Reworked run assignment so each attempt is tracked by exactly one target range
+- Improved run completion checks and floating-point comparison handling
+- Improved attempts, playtime, best run, and completion tracking
+- Reworked range statistics and status display in the Stage Browser
+- Added movement-aware speedhack detection to prevent manipulated runs from being counted
+- Added an option to disable speedhack detection
+- Reduced News refresh cache from 5 minutes to 1 minute
+- Updated Geode compatibility to 5.10.1
+
 # 2.2.5
 - Added a News tab for StartPos publications, mod updates, announcements, and warnings
 - Added news action buttons for opening levels, opening links, and copying text
