@@ -3,6 +3,7 @@
 #include <Geode/loader/Event.hpp>
 
 #include "./BlitzkriegProfile.hpp"
+#include "./WhiteListExport/WhiteListExport.hpp"
 #include "../../../CreateProfilePopup/index.hpp"
 
 #include "../../../../ui/RectNode.hpp"
@@ -11,7 +12,6 @@
 #include "../../../../store/GlobalStore.hpp"
 #include "../../../../utils/generateProfile.hpp"
 #include "../../../../utils/selectJsonFile.hpp"
-#include "../../../../utils/generateBackupFilename.hpp"
 #include "../../../../utils/findStartposesFromCurrentLevel.hpp"
 
 using namespace geode::prelude;
