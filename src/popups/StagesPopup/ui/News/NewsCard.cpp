@@ -199,9 +199,7 @@ bool NewsCard::init(
         return false;
 
     m_news = news;
-    m_size = size;
 
-    this->setContentSize(size);
     this->ignoreAnchorPointForPosition(false);
     this->setAnchorPoint({0.5f, 0.5f});
 
@@ -210,6 +208,14 @@ bool NewsCard::init(
 
     float const leftPadding = 16.f;
     float const rightPadding = 12.f;
+
+    // ! --- Layout offsets --- !
+
+    float const topStripOffset = 11.f;
+    float const titleTopOffset = 29.f;
+    float const descriptionTopOffset = 38.f;
+    float const descriptionBottomPadding = 8.f;
+    float const actionsTopOffset = 36.f;
 
     // ! --- Calculate actions width --- !
 
@@ -242,10 +248,49 @@ bool NewsCard::init(
             contentRight - leftPadding,
             30.f);
 
+    // ! --- Description label --- !
+
+    float const descriptionScale = 0.55f;
+
+    auto description =
+        Label::create(
+            news.description,
+            "chatFont.fnt");
+
+    description->setOpacity(210);
+    description->setScale(descriptionScale);
+
+    description->setMaxWidth(
+        contentWidth / descriptionScale);
+
+    description->setBreakWords(true);
+
+    auto descriptionHeight =
+        description->getScaledContentSize()
+            .height;
+
+    // ! --- Card height --- !
+
+    auto cardHeight =
+        std::max(
+            size.height,
+            descriptionTopOffset +
+                descriptionHeight +
+                descriptionBottomPadding);
+
+    CCSize const cardSize{
+        size.width,
+        cardHeight,
+    };
+
+    m_size = cardSize;
+
+    this->setContentSize(cardSize);
+
     // ! --- Accent border --- !
 
     auto border = RectNode::create(
-        size,
+        cardSize,
         ccc4FFromccc4B({
             accentColor.r,
             accentColor.g,
@@ -258,8 +303,8 @@ bool NewsCard::init(
     border->setAnchorPoint({0.5f, 0.5f});
 
     border->setPosition({
-        size.width / 2.f,
-        size.height / 2.f,
+        cardSize.width / 2.f,
+        cardHeight / 2.f,
     });
 
     this->addChild(border);
@@ -268,8 +313,8 @@ bool NewsCard::init(
 
     auto background = RectNode::create(
         {
-            size.width - 2.f,
-            size.height - 2.f,
+            cardSize.width - 2.f,
+            cardHeight - 2.f,
         },
         ccc4FFromccc4B({
             24,
@@ -283,8 +328,8 @@ bool NewsCard::init(
     background->setAnchorPoint({0.5f, 0.5f});
 
     background->setPosition({
-        size.width / 2.f,
-        size.height / 2.f,
+        cardSize.width / 2.f,
+        cardHeight / 2.f,
     });
 
     this->addChild(background);
@@ -294,7 +339,7 @@ bool NewsCard::init(
     auto accent = RectNode::create(
         {
             4.f,
-            size.height - 12.f,
+            cardHeight - 12.f,
         },
         ccc4FFromccc4B(accentColor),
         2.f);
@@ -304,7 +349,7 @@ bool NewsCard::init(
 
     accent->setPosition({
         7.f,
-        size.height / 2.f,
+        cardHeight / 2.f,
     });
 
     this->addChild(accent);
@@ -326,7 +371,7 @@ bool NewsCard::init(
 
     badge->setPosition({
         leftPadding,
-        size.height - 11.f,
+        cardHeight - topStripOffset,
     });
 
     this->addChild(badge);
@@ -363,7 +408,7 @@ bool NewsCard::init(
                 badge->getContentWidth() +
                 7.f,
 
-            size.height - 11.f,
+            cardHeight - topStripOffset,
         });
 
         this->addChild(pinnedLabel);
@@ -383,8 +428,8 @@ bool NewsCard::init(
     publishedLabel->setAnchorPoint({1.f, 0.5f});
 
     publishedLabel->setPosition({
-        size.width - rightPadding,
-        size.height - 11.f,
+        cardSize.width - rightPadding,
+        cardHeight - topStripOffset,
     });
 
     this->addChild(publishedLabel);
@@ -397,7 +442,11 @@ bool NewsCard::init(
             "bigFont.fnt");
 
     title->setAnchorPoint({0.f, 0.5f});
-    title->setPosition({leftPadding, 37.f});
+
+    title->setPosition({
+        leftPadding,
+        cardHeight - titleTopOffset,
+    });
 
     title->limitLabelWidth(
         contentWidth,
@@ -408,19 +457,12 @@ bool NewsCard::init(
 
     // ! --- Description --- !
 
-    auto description =
-        CCLabelBMFont::create(
-            news.description.c_str(),
-            "chatFont.fnt");
+    description->setAnchorPoint({0.f, 1.f});
 
-    description->setAnchorPoint({0.f, 0.5f});
-    description->setPosition({leftPadding, 18.f});
-    description->setOpacity(210);
-
-    description->limitLabelWidth(
-        contentWidth,
-        0.47f,
-        0.32f);
+    description->setPosition({
+        leftPadding,
+        cardHeight - descriptionTopOffset,
+    });
 
     this->addChild(description);
 
@@ -432,7 +474,7 @@ bool NewsCard::init(
         menu->setPosition({0.f, 0.f});
 
         auto buttonX =
-            size.width - rightPadding;
+            cardSize.width - rightPadding;
 
         for (
             auto actionIndex =
@@ -491,7 +533,7 @@ bool NewsCard::init(
 
             button->setPosition({
                 buttonX - buttonWidth / 2.f,
-                size.height / 2.f - 3.f,
+                cardHeight - actionsTopOffset,
             });
 
             buttonX -=

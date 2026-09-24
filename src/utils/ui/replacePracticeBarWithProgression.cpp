@@ -43,7 +43,7 @@ void replacePracticeBarWithProgression(
   {
     newLabelText = fmt::format(
         "Stage {}/{} Runs {}/{}",
-        std::max(metaInfo.completed, 1),
+        std::max(metaInfo.completed + 1, 1),
         metaInfo.total,
         metaInfo.currStageCompletedRanges,
         metaInfo.currStageTotalRanges);

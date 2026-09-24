@@ -271,40 +271,7 @@ void ProfilesListLayer::onExport(CCObject *obj)
 {
   auto const &profiles = GlobalStore::get()->getProfiles();
 
-  auto const backupDir =
-      Mod::get()->getSaveDir() / "backups";
-
-  auto const backupFile =
-      backupDir / backup::generateBackupFilename();
-
-  auto directoryResult =
-      geode::utils::file::createDirectory(backupDir);
-
-  if (directoryResult.isErr())
-  {
-    log::error(
-        "Unable to create backup directory: {}",
-        directoryResult.unwrapErr());
-
-    return;
-  }
-
-  matjson::Value json = profiles;
-
-  auto writeResult = geode::utils::file::writeStringSafe(
-      backupFile,
-      json.dump(matjson::NO_INDENTATION));
-
-  if (writeResult.isErr())
-  {
-    log::error(
-        "Unable to save backup: {}",
-        writeResult.unwrapErr());
-
-    return;
-  }
-
-  geode::utils::file::openFolder(backupFile);
+  WhiteListExport::create(profiles)->show();
 }
 
 void ProfilesListLayer::onCreate(CCObject *sender)
