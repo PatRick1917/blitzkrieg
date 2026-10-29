@@ -14,6 +14,7 @@
 #include "../events/RunClosedEvent.hpp"
 
 #include "../serialization/profile/index.hpp"
+#include "./SessionStore/SessionAttempt.hpp"
 
 using namespace geode::prelude;
 
@@ -27,13 +28,20 @@ public:
 
     void addProfile(Profile const &profile);
 
-    void addProfiles(
+    // Returns the number of added profiles.
+    // Profiles with an existing ID are skipped unless overwrite is true,
+    // overwritten ones are not counted as added.
+    std::size_t addProfiles(
         std::vector<Profile> const &newProfiles,
         bool overwrite = false);
 
     void updateProfile(Profile const &profile);
     void upProfileById(std::string const &profileId);
     void removeProfileById(std::string const &id);
+
+    // Reads every profile from disk again, after a backup was restored.
+    // Profile pointers taken before are no longer valid.
+    void reloadProfiles();
 
     void pinProfileById(
         std::string const &profileId,
@@ -46,9 +54,11 @@ public:
     void setRunEnd(float end);
     void resetRun();
 
+    // report receives where the attempt went and why, for the session log
     int checkRun(
         std::string const &profileId,
-        float timePlayed = 0.f);
+        float timePlayed = 0.f,
+        SessionAttempt *report = nullptr);
 
     // ! --- Search API --- !
     Profile *getProfileById(std::string const &profileId);

@@ -34,7 +34,8 @@
       "resources/logo-circle.png",
       "resources/startpos-button.png",
       "resources/sprites/*.png",
-      "resources/sprites/range/*.png"
+      "resources/sprites/range/*.png",
+      "resources/sprites/tabs/*.png"
     ],
     "spritesheets": {
       "Borders": [
@@ -230,6 +231,58 @@
         ]
       }
     },
+    "sfx-achievement-path": {
+      "name": "Achievement SFX",
+      "type": "file",
+      "description": "Custom sound played when an achievement is unlocked or the daily goal is reached. The stage sound is used when it is empty.",
+      "enable-if": "sfx-use-custom-sounds",
+      "default": {
+        "android": "",
+        "mac": "",
+        "win": "",
+        "ios": ""
+      },
+      "control": {
+        "dialog": "open",
+        "filters": [
+          {
+            "files": [
+              "*.mp3",
+              "*.ogg"
+            ],
+            "description": "Sound Files"
+          }
+        ]
+      }
+    },
+    "backups": {
+      "type": "title",
+      "name": "Backups"
+    },
+    "auto-backups": {
+      "type": "bool",
+      "name": "Automatic backups",
+      "description": "Back up all profiles when the game starts, at most once per interval. Profiles are also backed up before they are deleted, imported or regenerated.",
+      "default": true
+    },
+    "backups-interval": {
+      "type": "int",
+      "name": "Automatic backup interval (hours)",
+      "description": "How old the last automatic backup must be before a new one is made.",
+      "default": 12,
+      "min": 1,
+      "max": 168,
+      "enable-if": "auto-backups"
+    },
+    "backups-keep": {
+      "type": "int",
+      "name": "Automatic backups to keep",
+      "description": "Older automatic backups are deleted. Manual backups and the ones made before a delete, import or restore are kept until you delete them.",
+      "default": 10,
+      "min": 1,
+      "max": 50,
+      "enable-if": "auto-backups"
+    },
     "keybinds": {
       "type": "title",
       "name": "Keybinds"
@@ -249,6 +302,32 @@
         "A",
         "Q"
       ]
+    },
+    "open-stage-keybind": {
+      "type": "keybind",
+      "name": "Open the selected stage",
+      "description": "Opens the stage selected on the Stage Graph in the Stage Browser",
+      "default": [
+        "Enter"
+      ]
+    },
+    "developer-settings": {
+      "type": "title",
+      "name": "Developer"
+    },
+    "debug-mode": {
+      "type": "bool",
+      "name": "Debug mode",
+      "description": "Write detailed diagnostic logs, such as how each run is assigned to a range. Useful for bug reports.",
+      "default": false
+    },
+    "debug-actions": {
+      "type": "button",
+      "name": "Debug logs",
+      "description": "Logs are saved to the <cy>geode/logs</c> folder. Send the newest <cy>.log</c> file when reporting a bug.",
+      "buttons": {
+        "open-logs-folder": "Open Logs Folder"
+      }
     }
   }
 }

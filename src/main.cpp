@@ -4,6 +4,7 @@
 #include <Geode/modify/PlayLayer.hpp>
 
 #include <chrono>
+#include <ctime>
 #include <deque>
 #include <optional>
 
@@ -11,12 +12,19 @@
 #include "./events/RunClosedEvent.hpp"
 #include "./serialization/profile/index.hpp"
 #include "./store/GlobalStore.hpp"
+#include "./store/SessionStore/SessionStore.hpp"
+#include "./store/BackupStore/BackupStore.hpp"
+#include "./store/Achievements/Achievements.hpp"
+#include "./utils/playSfx.hpp"
 
 using namespace geode::prelude;
 
-namespace BKGlobal
+$on_mod(Loaded)
 {
-    FMOD::ChannelGroup *sfxGroup = nullptr;
+    // The session log can be large, read it before the first attempt
+    SessionStore::get();
+
+    BackupStore::get()->createAutomaticIfDue();
 }
 
 class $modify(BlitzPlayLayer, PlayLayer)
@@ -52,6 +60,11 @@ class $modify(BlitzPlayLayer, PlayLayer)
 
         float attStartTime = 0.f;
         float attEndTime = 0.f;
+
+        // For the session log
+        std::time_t attStartedAt = 0;
+        float attFrom = 0.f;
+        float attTo = 0.f;
     };
 
     static void onModify(auto &self)
@@ -66,16 +79,7 @@ public:
         if (!PlayLayer::init(level, p1, p2))
             return false;
 
-        auto engine = FMODAudioEngine::get();
-        auto system = engine->m_system;
-
-        if (BKGlobal::sfxGroup == nullptr)
-            system->createChannelGroup("blitzkrieg", &BKGlobal::sfxGroup);
-
-        if (Mod::get()->getSettingValue<bool>("ignore-built-in-game-sfx"))
-            BKGlobal::sfxGroup->setVolume(Mod::get()->getSettingValue<float>("sfx-volume"));
-        else
-            BKGlobal::sfxGroup->setVolume(GameManager::get()->m_sfxVolume * Mod::get()->getSettingValue<float>("sfx-volume"));
+        prepareSfx();
 
         m_fields->runClosedListener = RunClosedEvent().listen(
             [this](float from, float to, Profile *profile, Range *closedRange, Stage *closedStage)
@@ -147,6 +151,8 @@ public:
 
         m_fields->hasRespawned = true;
         m_fields->attStartTime = this->timeForPos(m_player1->getPosition(), 0, 0, true, 0);
+        m_fields->attStartedAt = std::time(nullptr);
+        m_fields->attFrom = this->getCurrentPercent();
 
         GlobalStore::get()->setRunStart(
             this->getCurrentPercent());
@@ -163,6 +169,7 @@ public:
         if (!m_level->isPlatformer())
         {
             m_fields->attEndTime = this->timeForPos({m_levelLength, 0}, 0, 0, true, 0);
+            m_fields->attTo = 100.f;
             GlobalStore::get()->setRunEnd(100.f);
             checkRun();
         }
@@ -173,19 +180,57 @@ public:
     void checkRun()
     {
         auto currentProfile = GlobalStore::get()->getProfileByLevel(BlitzPlayLayer::get()->m_level);
-        const bool ignorePractice = Mod::get()->getSettingValue<bool>("ignore-practice-mode");
 
-        if (ignorePractice && this->m_isPracticeMode)
+        // Levels without a profile are not tracked, the log stays about tracked ones
+        if (!currentProfile)
             return;
 
-        if (isLegal() && currentProfile)
-        {
-            const auto timePlayedForAttempt = m_fields->attEndTime - m_fields->attStartTime;
-            int res = GlobalStore::get()->checkRun(currentProfile->id, timePlayedForAttempt);
+        const bool ignorePractice = Mod::get()->getSettingValue<bool>("ignore-practice-mode");
+        const auto timePlayedForAttempt = m_fields->attEndTime - m_fields->attStartTime;
 
-            if (res != -1)
-                playSound(!!res);
+        // ! --- Session log entry --- !
+        SessionAttempt report;
+        report.levelId = m_level->m_levelID
+                             ? utils::numToString(m_level->m_levelID.value())
+                             : utils::numToString(EditorIDs::getID(m_level));
+        report.levelName = m_level->m_levelName;
+        report.profileId = currentProfile->id;
+        report.profileName = currentProfile->profileName;
+        report.startedAt = m_fields->attStartedAt;
+        report.endedAt = std::time(nullptr);
+        report.duration = timePlayedForAttempt;
+        report.from = m_fields->attFrom;
+        report.to = m_fields->attTo;
+
+        if (ignorePractice && this->m_isPracticeMode)
+        {
+            report.outcome = AttemptOutcome::Ignored;
+            report.reason = "Practice mode is ignored in the settings";
         }
+        else if (!isLegal())
+        {
+            report.outcome = AttemptOutcome::Ignored;
+            report.reason = getIllegalReason();
+        }
+        else
+        {
+            int res = GlobalStore::get()->checkRun(currentProfile->id, timePlayedForAttempt, &report);
+
+            // ! An achievement or the daily goal takes over the run sound
+            const auto unlocked = updateAchievements(*currentProfile);
+
+            if (!unlocked.empty())
+                GlobalStore::get()->updateProfile(*currentProfile);
+
+            const bool goalReached = checkDailyGoalReached();
+
+            if (!unlocked.empty() || goalReached)
+                playSfx(SfxKind::Achievement);
+            else if (res != -1)
+                playSfx(res ? SfxKind::Stage : SfxKind::Progress);
+        }
+
+        SessionStore::get()->add(std::move(report));
     }
 
     void destroyPlayer(
@@ -226,72 +271,12 @@ public:
                 true,
                 0);
 
+        m_fields->attTo = this->getCurrentPercent();
+
         GlobalStore::get()->setRunEnd(
             this->getCurrentPercent());
 
         checkRun();
-    }
-
-    static FMOD_RESULT fmodNonBlockCallback(FMOD_SOUND *a, FMOD_RESULT b)
-    {
-        log::info("nonBlockCallback called");
-
-        // auto engine = FMODAudioEngine::get();
-        // auto system = engine->m_system;
-        // FMOD::Channel *playingChannel;
-
-        return FMOD_OK;
-    }
-
-    void playSound(bool isStage)
-    {
-        if (Mod::get()->getSettingValue<bool>("disable-run-notification-sound"))
-            return;
-
-        FMOD_RESULT result;
-        FMOD::Sound *sound;
-        FMOD_CREATESOUNDEXINFO exinfo;
-        FMOD::Channel *playingChannel;
-
-        memset(&exinfo, 0, sizeof(FMOD_CREATESOUNDEXINFO));
-        exinfo.cbsize = sizeof(FMOD_CREATESOUNDEXINFO);
-        exinfo.nonblockcallback = BlitzPlayLayer::fmodNonBlockCallback;
-
-        if (Mod::get()->getSettingValue<bool>("ignore-built-in-game-sfx"))
-            BKGlobal::sfxGroup->setVolume(Mod::get()->getSettingValue<float>("sfx-volume"));
-        else
-            BKGlobal::sfxGroup->setVolume(GameManager::get()->m_sfxVolume * Mod::get()->getSettingValue<float>("sfx-volume"));
-
-        auto engine = FMODAudioEngine::get();
-        auto system = engine->m_system;
-
-        auto sfxStagePath = Mod::get()->getSettingValue<std::filesystem::path>("sfx-stage-path");
-        auto sfxProgressPath = Mod::get()->getSettingValue<std::filesystem::path>("sfx-progress-path");
-        auto sfxUseCustomSounds = Mod::get()->getSettingValue<bool>("sfx-use-custom-sounds");
-
-        auto stageSound = !sfxStagePath.empty() &&
-                                  sfxUseCustomSounds
-                              ? geode::utils::string::pathToString(sfxStagePath)
-                              : fmt::format("{}/stage_complete.mp3", Mod::get()->getResourcesDir());
-        auto progressSound = !sfxProgressPath.empty() &&
-                                     sfxUseCustomSounds
-                                 ? geode::utils::string::pathToString(sfxProgressPath)
-                                 : fmt::format("{}/progress_complete.mp3", Mod::get()->getResourcesDir());
-
-        std::string actualSound = isStage ? stageSound : progressSound;
-        result = system->createStream(actualSound.c_str(), FMOD_DEFAULT | FMOD_LOOP_OFF | FMOD_2D | FMOD_LOWMEM, &exinfo, &sound);
-
-        if (result != FMOD_OK)
-        {
-            log::info("FMOD ERROR {}", (int)result);
-        }
-        else
-        {
-            auto res = system->playSound(sound, BKGlobal::sfxGroup, false, &playingChannel);
-
-            if (res != FMOD_OK)
-                log::info("FMOD ERROR STARTING AUDIO: {}", (int)res);
-        }
     }
 
     void resetState()
@@ -306,6 +291,7 @@ public:
 
         m_fields->attStartTime = 0.f;
         m_fields->attEndTime = 0.f;
+        m_fields->attTo = 0.f;
 
         resetSpeedhackSamples();
 
@@ -504,6 +490,21 @@ public:
 
             return;
         }
+    }
+
+    // Why isLegal() is false, for the session log
+    std::string getIllegalReason()
+    {
+        if (m_fields->isNoclip)
+            return "Noclip was detected, the attempt is not counted";
+
+        if (m_fields->isSpeedhack)
+            return "Speedhack was detected, the attempt is not counted";
+
+        if (m_isIgnoreDamageEnabled || m_ignoreDamage)
+            return "Damage was ignored (safe mode or a hack), the attempt is not counted";
+
+        return "The attempt is not legal";
     }
 
     bool isLegal()
